@@ -1,8 +1,25 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from sqlalchemy import select
+from passlib.context import CryptContext
 from pydantic import BaseModel
 from typing import List
+from contextlib import asynccontextmanager
 
-app = FastAPI()
+import models, schemas
+from database import Base, engine, get_db
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from database import Base, engine
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+
+    yield 
+
+
+app = FastAPI(lifespan=lifespan)
+pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class Coordinate(BaseModel):
     latitude: float
@@ -19,3 +36,19 @@ async def get_coordinates():
     ]
     return coords
 
+@app.post("/register", response_model=schemas.UserOut)
+def register(payload: schemas.RegisterIn, db: Session = Depends(get_db)):
+
+    get_existing = db.execute(
+        select(models.User).where(models.User.username == payload.username)
+    ).scalar_one_or_none()
+
+    if get_existing:
+        raise HTTPException(status_code=409, detail="Username already taken")
+    
+    hashed_pwd = pwd_ctx.hash(payload.password)
+    user = models.User(username=payload.username, password_hash=hashed_pwd)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user 
