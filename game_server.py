@@ -5,9 +5,37 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from typing import List
 from contextlib import asynccontextmanager
-
+from datetime import datetime, timedelta, timezone
+import hashlib, uuid
+from jose import jwt
 import models, schemas
 from database import Base, engine, get_db
+
+JWT_SECRET = "dev-secret-change-me"
+JWT_ALG = "HS256"
+ACCESS_TTL_SECONDS = 10 * 60
+REFRESH_TTL_DAYS = 14
+
+def _now():
+    return datetime.now(timezone.utc)
+
+def _sha256_hex(s: str) -> str:
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+def create_access_token(user_id: int) -> str:
+    now = _now()
+    payload = {
+        "sub": str(user_id),
+        "jlti": str(uuid.uuid4()),
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=ACCESS_TTL_SECONDS)).timestamp())
+    }
+
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+
+def verify_password(plain: str, pw_hash: str) -> bool:
+    return pwd_ctx.verify(plain, pw_hash)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -52,3 +80,18 @@ def register(payload: schemas.RegisterIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     return user 
+
+@app.post("/login", response_model=schemas.AccessTokenOut)
+def login(payload: schemas.LoginIn, db: Session = Depends(get_db)):
+    user = db.execute(
+        select(models.User).where(models.User.username == payload.username)
+    ).scalar_one_or_none()
+
+    if not user or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid Credentials")
+    
+    access = create_access_token(user.id)
+
+    return {"access_token": access}
+
+
