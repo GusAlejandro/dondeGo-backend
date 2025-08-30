@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from typing import List
@@ -10,6 +11,10 @@ import hashlib, uuid
 from jose import jwt
 import models, schemas
 from database import Base, engine, get_db
+from typing import Dict, Any 
+from fastapi.security import OAuth2PasswordBearer
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 JWT_SECRET = "dev-secret-change-me"
 JWT_ALG = "HS256"
@@ -26,7 +31,7 @@ def create_access_token(user_id: int) -> str:
     now = _now()
     payload = {
         "sub": str(user_id),
-        "jlti": str(uuid.uuid4()),
+        "jti": str(uuid.uuid4()),
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=ACCESS_TTL_SECONDS)).timestamp())
     }
@@ -35,6 +40,44 @@ def create_access_token(user_id: int) -> str:
 
 def verify_password(plain: str, pw_hash: str) -> bool:
     return pwd_ctx.verify(plain, pw_hash)
+
+def decode_access_token(token: str) -> Dict[str, Any]:
+    payload = jwt.decode(
+        token, key=JWT_SECRET, algorithms=[JWT_ALG], 
+        options={
+            "require": ["sub", "jti", "iat", "exp"],
+            "verify_signature": True,
+            "verify_exp": True,
+            "verify_iat": True,
+        },
+    )
+    return payload
+
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.User:
+    try:
+        payload = decode_access_token(token)
+        sub = payload.get("sub")
+        if sub is None:
+            raise ValueError("Missing sub")
+        user_id = int(sub)
+    except:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    user = db.get(models.User, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="user not found",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    return user
+
 
 
 @asynccontextmanager
@@ -49,20 +92,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-class Coordinate(BaseModel):
-    latitude: float
-    longitude: float
-
-@app.get("/coordinates", response_model=List[Coordinate])
-async def get_coordinates():
-    coords = [
-        {"latitude": 37.7749, "longitude": -122.4194},  # San Francisco
-        {"latitude": 34.0522, "longitude": -118.2437},  # Los Angeles
-        {"latitude": 40.7128, "longitude": -74.0060},   # New York
-        {"latitude": 51.5074, "longitude": -0.1278},    # London
-        {"latitude": 35.6895, "longitude": 139.6917},   # Tokyo
-    ]
-    return coords
 
 @app.post("/register", response_model=schemas.UserOut)
 def register(payload: schemas.RegisterIn, db: Session = Depends(get_db)):
@@ -77,7 +106,14 @@ def register(payload: schemas.RegisterIn, db: Session = Depends(get_db)):
     hashed_pwd = pwd_ctx.hash(payload.password)
     user = models.User(username=payload.username, password_hash=hashed_pwd)
     db.add(user)
-    db.commit()
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # handles case if user w/matching username created after check 
+        raise HTTPException(status_code=409, detail="Username already taken")
+
     db.refresh(user)
     return user 
 
@@ -88,10 +124,13 @@ def login(payload: schemas.LoginIn, db: Session = Depends(get_db)):
     ).scalar_one_or_none()
 
     if not user or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid Credentials")
+        raise HTTPException(status_code=401, detail="Invalid Credentials", headers={"WWW-Authenticate": "Bearer"})
     
     access = create_access_token(user.id)
 
     return {"access_token": access}
 
 
+@app.post('/start_game')
+def start_game(user: models.User = Depends(get_current_user)):
+    return {"id": user.id, "username": user.username}
