@@ -3,53 +3,6 @@ from sqlalchemy.orm import relationship, mapped_column, Mapped
 from typing import List
 from database import Base
 
-# class User(Base):
-#     __tablename__ = "user"
-
-#     id: Mapped[int] = mapped_column(primary_key=True)
-#     username: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
-#     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-
-#     games: Mapped[List["UserGame"]] = relationship(back_populates="user")
-
-
-# class UserGame(Base):
-#     __tablename__ = "user_game"
-
-#     id: Mapped[int] = mapped_column(primary_key=True)
-
-#     id = Column(Integer, primary_key=True)
-#     user_id = Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-#     daily_game_id = Column(ForeignKey("daily_game.id", ondelete="CASCADE"), nullable=False)
-
-# class UserGuess(Base):
-#     __tablename__ = "user_guess"
-
-#     id = Column(Integer, primary_key=True)
-    
-
-# class DailyGame(Base):
-#     __tablename__ = "daily_game"
-
-#     id = Column(Integer, primary_key=True)
-#     game_date = Column(Date, unique=True, nullable=False)
-
-#     rounds = relationship(
-#         "GameRound",
-#         cascade="all, delete-orphan",
-#         order_by="GameRound.id",
-#         lazy="selectin"
-#     )
-
-# class GameRound(Base):
-#     __tablename__ = "game_rounds"
-
-#     id = Column(Integer, primary_key=True)
-#     lat = Column(Float, nullable=False)
-#     long = Column(Float, nullable=False)
-
-#     daily_game_id = Column(ForeignKey("daily_game.id", ondelete="CASCADE"), nullable=False)
-
 
 class User(Base):
     __tablename__ = "user"
@@ -114,6 +67,9 @@ class GameRound(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     round_id: Mapped[int] = mapped_column()
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+
     daily_game_id: Mapped[int] = mapped_column(ForeignKey("daily_game.id", ondelete="CASCADE"))
     
     daily_game: Mapped["DailyGame"] = relationship(back_populates="rounds")
