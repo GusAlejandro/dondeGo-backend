@@ -1,12 +1,62 @@
 from sqlalchemy.orm import Session 
-from models import UserGame
+from sqlalchemy import select, and_
+from sqlalchemy.exc import IntegrityError
+from models import UserGame, DailyGame
+from datetime import date 
 
 class GameService:
 
     def __init__(self, user_id: int, session: Session):
-        self.db = session
+        self.session = session
         self.user_id = user_id
 
     def start_daily_game(self) -> UserGame:
-        pass 
+        today: date = date.date()
+        ug = self.get_or_create_user_game(today) 
+        # look into eager-loading the daily game, current guesses, etc 
+        return ug 
+        
+
+    def get_or_create_user_game(self, d: date) -> UserGame:
+
+        # fetch the global current daily game:
+        daily_game: DailyGame = self.session.execute(
+            select(DailyGame).where(DailyGame.game_date == d)
+        ).scalar_one_or_none()
+
+        if daily_game is None:
+            raise ValueError("No Daily Game has been set, run the seedeing script")
+
+        user_game: UserGame = self.session.execute(
+            select(UserGame).where(
+                and_(UserGame.user_id == self.user_id, UserGame.daily_game_id == daily_game.id)
+            )
+        ).scalar_one_or_none()
+
+        if user_game:
+            # user has existing game, return current game object 
+            return user_game
+        
+        new_user_game = UserGame(user_id = self.user_id, daily_game=daily_game)
+        self.session.add(new_user_game)
+
+        try: 
+            self.session.flush()
+            return new_user_game
+        except IntegrityError:
+            self.session.rollback()
+            # another request made in parallel, fetch the existing one 
+            ug: UserGame = self.session.execute(select(UserGame).where(and_(UserGame.user_id == self.user_id, UserGame.daily_game_id == daily_game.id))).scalar_one_or_none()
+        return ug 
+
+            
+
+
+
+
+
+
+
+
+
 
