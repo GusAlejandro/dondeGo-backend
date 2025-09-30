@@ -13,6 +13,7 @@ import models, schemas
 from database import Base, engine, get_db
 from typing import Dict, Any 
 from fastapi.security import OAuth2PasswordBearer
+from game_service import GameService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -78,6 +79,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
     return user
 
+def get_game_service(db: Session = Depends(get_db)) -> GameService:
+    game_svc: GameService = GameService(db)
+    return game_svc
 
 
 @asynccontextmanager
@@ -132,5 +136,8 @@ def login(payload: schemas.LoginIn, db: Session = Depends(get_db)):
 
 
 @app.post('/start_game')
-def start_game(user: models.User = Depends(get_current_user)):
+def start_game(user: models.User = Depends(get_current_user), game_svc: GameService = Depends(get_game_service)):
+    # TODO: Write out logic for this endpoint, only placeholder so far 
+    # TODO: At some point we need to call commit() on the session as we only flush() in the GameService layer
+    user_game = game_svc.start_daily_game(user.id)
     return {"id": user.id, "username": user.username}
