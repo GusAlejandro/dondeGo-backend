@@ -21,5 +21,20 @@ class AccessTokenOut(BaseModel):
     token_type: str = "bearer"
 
 
-class GameStartIn(BaseModel):
-    pass 
+class StartGameRequest(BaseModel):
+    game_mode: bool = None
+
+class RoundPublic(BaseModel):
+    latitude: float
+    longitude: float
+
+class GameState(BaseModel):
+    daily_game_id: int
+    completed: bool
+    current_round: int 
+    current_round_coordinates: RoundPublic
+
+
+
+
+

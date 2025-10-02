@@ -135,9 +135,7 @@ def login(payload: schemas.LoginIn, db: Session = Depends(get_db)):
     return {"access_token": access}
 
 
-@app.post('/start_game')
-def start_game(user: models.User = Depends(get_current_user), game_svc: GameService = Depends(get_game_service)):
-    # TODO: Write out logic for this endpoint, only placeholder so far 
-    # TODO: At some point we need to call commit() on the session as we only flush() in the GameService layer
-    user_game = game_svc.start_daily_game(user.id)
-    return {"id": user.id, "username": user.username}
+@app.post('/start_game', response_model=schemas.GameState)
+def start_game(payload: schemas.StartGameRequest, session: Session = Depends(get_db), user: models.User = Depends(get_current_user), game_svc: GameService = Depends(get_game_service)):
+    game: schemas.GameState = game_svc.start_daily_game(user.id)
+    return game
