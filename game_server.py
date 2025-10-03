@@ -139,3 +139,7 @@ def login(payload: schemas.LoginIn, db: Session = Depends(get_db)):
 def start_game(payload: schemas.StartGameRequest, session: Session = Depends(get_db), user: models.User = Depends(get_current_user), game_svc: GameService = Depends(get_game_service)):
     game: schemas.GameState = game_svc.start_daily_game(user.id)
     return game
+
+@app.post('/submit_guess', response_model=schemas.GuessResponse)
+def submit_guess(payload: schemas.GuessRequest, session: Session = Depends(get_db), user: models.User = Depends(get_current_user), game_svc: GameService = Depends(get_game_service):
+    return game_svc.submit_guess(user.id, payload)

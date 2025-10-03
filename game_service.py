@@ -3,7 +3,8 @@ from sqlalchemy import select, and_, func
 from sqlalchemy.exc import IntegrityError
 from models import UserGame, DailyGame, UserGuess, GameRound
 from datetime import date 
-from schemas import GameState, RoundPublic
+from schemas import GameState, Coordinate, GuessResponse, GuessRequest
+import math
 
 class GameService:
 
@@ -23,24 +24,77 @@ class GameService:
 
 
         # get the daily game in order to pull current round coordinates 
-        curr_coords: RoundPublic = None
+        curr_coords: Coordinate = None
         daily_game: DailyGame = self.get_daily_game()
         if not is_done:
             curr_game_round = self.session.scalar(select(GameRound).where(
                 GameRound.daily_game_id == daily_game.id, 
                 GameRound.round_id == 3
             ))
-            curr_coords = RoundPublic(latitude=curr_game_round.latitude, longitude=curr_game_round.longitude)
+            curr_coords = Coordinate(latitude=curr_game_round.latitude, longitude=curr_game_round.longitude)
 
 
         # craft GameState object for response 
         game_state: GameState = GameState(daily_game_id=daily_game.id, current_round=curr_round, current_round_coordinates=curr_coords)
         return game_state
     
-    def submit_guess(self) -> None:
+    def submit_guess(self, user_id: int, guess: GuessRequest) -> GuessResponse:
         # TODO: Implement guess logic, it should calculate score, store it, and advance state of the game
         # TODO: Figure out if we will have a seperate endpoint to get current state or if it will be returned as part of this 
-        pass 
+        """
+        fetch the current round correct answer 
+        calculate score using guess and correct answer
+        persist that score and advance game state
+        create new GameState object and return as GuessResponse 
+        """
+        daily_game: DailyGame = self.get_daily_game()
+        curr_round: GameRound = self.session.scalar(select(GameRound).where(
+            GameRound.daily_game_id == daily_game.id,
+            GameRound.round_id == guess.round
+        ))
+
+        actual: Coordinate = Coordinate(latitude=curr_round.latitude, longitude=curr_round.longitude)
+
+        score: int = GameService.calculate_score(guess.guess, actual)
+
+        
+
+    @staticmethod
+    def calculate_score(guess: Coordinate, actual: Coordinate) -> int:
+        max_score = 5000
+        d_half_km = 1000   # ~half points at 1000 km
+        d_max_km = 9000    # beyond this = zero
+        full_score_under_m = 25
+
+        d = GameService.haversine_km(
+            guess.latitude, guess.longitude,
+            actual.latitude, actual.longitude
+        )
+
+        # Perfect score for very close guesses
+        if d <= full_score_under_m / 1000:
+            return max_score
+
+        # Hard zero for way-off guesses
+        if d >= d_max_km:
+            return 0
+
+        # Exponential decay
+        k = math.log(2) / d_half_km
+        score = max_score * math.exp(-k * d)
+
+        return int(round(score))
+    
+    @staticmethod
+    def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        R = 6371.0  # Earth radius in km
+        lat1_rad, lat2_rad = math.radians(lat1), math.radians(lat2)
+        dlat = math.radians(lat2 - lat1)
+        dlon = math.radians(lon2 - lon1)
+
+        a = math.sin(dlat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        return R * c
     
     def get_daily_game(self) -> DailyGame:
         today: date = date.today()

@@ -24,7 +24,7 @@ class AccessTokenOut(BaseModel):
 class StartGameRequest(BaseModel):
     game_mode: bool = None
 
-class RoundPublic(BaseModel):
+class Coordinate(BaseModel):
     latitude: float
     longitude: float
 
@@ -32,9 +32,15 @@ class GameState(BaseModel):
     daily_game_id: int
     completed: bool
     current_round: int 
-    current_round_coordinates: RoundPublic
+    current_round_coordinates: Coordinate
 
+class GuessRequest(BaseModel):
+    guess: Coordinate
+    round: int
 
+class GuessResponse(BaseModel):
+    score: int
+    game_state: GameState
 
 
 
