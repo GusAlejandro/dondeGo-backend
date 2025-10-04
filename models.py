@@ -44,6 +44,7 @@ class UserGuess(Base):
     round_id: Mapped[int] = mapped_column()
     user_game_id: Mapped[int] = mapped_column(ForeignKey("user_game.id", ondelete="CASCADE"))
     game_round_id: Mapped[int] = mapped_column(ForeignKey("game_round.id"))
+    score: Mapped[int] = mapped_column()
 
     # UserGuess is for a GameRound of the DailyGame
     game_round: Mapped["GameRound"] = relationship()

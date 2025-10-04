@@ -39,14 +39,6 @@ class GameService:
         return game_state
     
     def submit_guess(self, user_id: int, guess: GuessRequest) -> GuessResponse:
-        # TODO: Implement guess logic, it should calculate score, store it, and advance state of the game
-        # TODO: Figure out if we will have a seperate endpoint to get current state or if it will be returned as part of this 
-        """
-        fetch the current round correct answer 
-        calculate score using guess and correct answer
-        persist that score and advance game state
-        create new GameState object and return as GuessResponse 
-        """
         daily_game: DailyGame = self.get_daily_game()
         curr_round: GameRound = self.session.scalar(select(GameRound).where(
             GameRound.daily_game_id == daily_game.id,
@@ -56,6 +48,35 @@ class GameService:
         actual: Coordinate = Coordinate(latitude=curr_round.latitude, longitude=curr_round.longitude)
 
         score: int = GameService.calculate_score(guess.guess, actual)
+
+        user_game: UserGame = self.session.scalar(
+            select(UserGame).where(
+                and_(UserGame.user_id == user_id, UserGame.daily_game_id == daily_game.id)
+            )
+        )
+
+        user_guess: UserGuess = UserGuess(round_id=curr_round.id, user_game_id = user_game.id, game_round_id=curr_round.id, score=score)
+
+        self.session.add(user_guess)
+        self.session.flush()
+
+        # advance game state 
+        is_done: bool = True if curr_round.round_id = 5 else False
+        new_coordinates: Coordinate = None
+        if not is_done:
+            next_round: GameRound = self.session.scalar(select(GameRound).where(
+                GameRound.daily_game_id == daily_game.id,
+                GameRound.round_id == curr_round.round_id + 1
+            ))
+            new_coordinates.longitude = next_round.longitude
+            new_coordinates.latitude = next_round.latitude
+
+        new_game_state: GameState = GameState(daily_game_id=daily_game.id, completed=is_done, current_round=next_round.round_id, current_round_coordinates=new_coordinates)
+        return GuessResponse(score=score, game_state=new_game_state)
+
+        
+
+
 
         
 
