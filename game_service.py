@@ -13,7 +13,7 @@ class GameService:
 
 
     def start_daily_game(self, user_id) -> GameState:
-        today: date = date.date()
+        today: date = date.today()
         # fetches the current game, will always return as long as daily_game exits 
         ug = self.get_or_create_user_game(today, user_id) 
 
@@ -29,7 +29,7 @@ class GameService:
         if not is_done:
             curr_game_round = self.session.scalar(select(GameRound).where(
                 GameRound.daily_game_id == daily_game.id, 
-                GameRound.round_id == 3
+                GameRound.round_id == curr_round
             ))
             curr_coords = Coordinate(latitude=curr_game_round.latitude, longitude=curr_game_round.longitude)
 
@@ -61,7 +61,7 @@ class GameService:
         self.session.flush()
 
         # advance game state 
-        is_done: bool = True if curr_round.round_id = 5 else False
+        is_done: bool = True if curr_round.round_id == 5 else False
         new_coordinates: Coordinate = None
         if not is_done:
             next_round: GameRound = self.session.scalar(select(GameRound).where(
@@ -74,11 +74,6 @@ class GameService:
         new_game_state: GameState = GameState(daily_game_id=daily_game.id, completed=is_done, current_round=next_round.round_id, current_round_coordinates=new_coordinates)
         return GuessResponse(score=score, game_state=new_game_state)
 
-        
-
-
-
-        
 
     @staticmethod
     def calculate_score(guess: Coordinate, actual: Coordinate) -> int:
@@ -129,7 +124,7 @@ class GameService:
 
         # fetch the global current daily game:
         daily_game: DailyGame = self.session.execute(
-            select(DailyGame).where(DailyGame.game_date == d)
+            select(DailyGame).where(DailyGame.date == d)
         ).scalar_one_or_none()
 
         if daily_game is None:
